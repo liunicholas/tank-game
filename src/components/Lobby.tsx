@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { GameClient } from '@/game/network/GameClient'
 
 const TANK_COLORS = [
@@ -42,8 +42,25 @@ export default function Lobby({
   const clientRef = useRef<GameClient | null>(null)
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const connectedRef = useRef(false)
+
+  // Use refs to avoid stale closures and prevent useEffect re-runs
+  const onPlayersUpdateRef = useRef(onPlayersUpdate)
+  const onGameStartRef = useRef(onGameStart)
+  const onPlayerIdAssignedRef = useRef(onPlayerIdAssigned)
+
+  // Keep refs up to date
+  useEffect(() => {
+    onPlayersUpdateRef.current = onPlayersUpdate
+    onGameStartRef.current = onGameStart
+    onPlayerIdAssignedRef.current = onPlayerIdAssigned
+  })
 
   useEffect(() => {
+    // Prevent double connection in StrictMode
+    if (connectedRef.current) return
+    connectedRef.current = true
+
     const client = new GameClient(roomId)
     clientRef.current = client
 
@@ -57,23 +74,24 @@ export default function Lobby({
     })
 
     client.onPlayersUpdate((updatedPlayers) => {
-      onPlayersUpdate(updatedPlayers)
+      onPlayersUpdateRef.current(updatedPlayers)
     })
 
     client.onPlayerIdAssigned((id) => {
-      onPlayerIdAssigned(id)
+      onPlayerIdAssignedRef.current(id)
     })
 
     client.onGameStart(() => {
-      onGameStart()
+      onGameStartRef.current()
     })
 
     client.connect()
 
     return () => {
       client.disconnect()
+      connectedRef.current = false
     }
-  }, [roomId, playerName, isHost, onPlayersUpdate, onGameStart, onPlayerIdAssigned])
+  }, [roomId, playerName, isHost])
 
   const handleStartGame = () => {
     if (clientRef.current && isHost && players.length >= 1) {

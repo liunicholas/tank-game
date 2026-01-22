@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useSearchParams } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import Lobby from '@/components/Lobby'
 
@@ -9,7 +9,7 @@ import Lobby from '@/components/Lobby'
 const GameCanvas = dynamic(() => import('@/components/GameCanvas'), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center h-[480px] w-[640px] bg-game-bg border-4 border-white">
+    <div className="flex items-center justify-center h-[800px] w-[1280px] bg-game-bg border-4 border-white">
       <p className="font-pixel text-white text-sm animate-pulse">LOADING...</p>
     </div>
   ),
@@ -27,17 +27,17 @@ export default function GameRoom() {
   const [players, setPlayers] = useState<{ id: string; name: string; color: string }[]>([])
   const [playerId, setPlayerId] = useState<string>('')
 
-  const handleGameStart = () => {
+  const handleGameStart = useCallback(() => {
     setGameStarted(true)
-  }
+  }, [])
 
-  const handlePlayersUpdate = (newPlayers: { id: string; name: string; color: string }[]) => {
+  const handlePlayersUpdate = useCallback((newPlayers: { id: string; name: string; color: string }[]) => {
     setPlayers(newPlayers)
-  }
+  }, [])
 
-  const handlePlayerIdAssigned = (id: string) => {
+  const handlePlayerIdAssigned = useCallback((id: string) => {
     setPlayerId(id)
-  }
+  }, [])
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-4">

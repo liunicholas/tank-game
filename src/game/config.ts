@@ -2,8 +2,8 @@ import Phaser from 'phaser'
 
 export const GameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  width: 640,
-  height: 480,
+  width: 1280,
+  height: 800,
   backgroundColor: '#1a1a2e',
   pixelArt: true,
   roundPixels: true,
@@ -22,6 +22,8 @@ export const GameConfig: Phaser.Types.Core.GameConfig = {
 
 // Game constants
 export const TILE_SIZE = 32
+export const MAP_WIDTH = 40
+export const MAP_HEIGHT = 25
 export const TANK_SPEED = 150
 export const BULLET_SPEED = 300
 export const TANK_SIZE = 24

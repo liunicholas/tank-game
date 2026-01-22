@@ -16,36 +16,46 @@ const TICK_RATE = 20
 const TICK_INTERVAL = 1000 / TICK_RATE
 const GAME_DURATION_MS = 3 * 60 * 1000 // 3 minutes
 
-// Map layout (20x15 tiles)
-const MAP_WIDTH = 20
-const MAP_HEIGHT = 15
+// Map layout (40x25 tiles = 1280x800)
+const MAP_WIDTH = 40
+const MAP_HEIGHT = 25
 const MAP_TILES = [
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-  [1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,1],
-  [1,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,1],
-  [1,0,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,1],
-  [1,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1],
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,2,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,2,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,1,1,1,1,1,1,0,0,1,0,0,0,1,1,1,1,1,1,1,1,0,0,0,1,0,0,1,1,1,1,1,1,0,0,0,1],
+  [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+  [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+  [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+  [1,0,0,0,1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,1,1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,0,0,0,1,1,1,0,0,1,0,0,0,0,0,2,0,0,0,0,1,0,0,1,1,1,0,0,0,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,1,1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,0,0,0,1],
+  [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+  [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+  [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+  [1,0,0,0,1,1,1,1,1,1,0,0,1,0,0,0,1,1,1,1,1,1,1,1,0,0,0,1,0,0,1,1,1,1,1,1,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,2,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,2,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
 ]
 
 const SPAWN_POINTS = [
-  { x: 1, y: 1 },
-  { x: 18, y: 1 },
-  { x: 1, y: 13 },
-  { x: 18, y: 13 },
-  { x: 9, y: 7 },
-  { x: 10, y: 7 },
-  { x: 5, y: 5 },
-  { x: 14, y: 9 },
+  { x: 1, y: 1 },     // Top-left
+  { x: 38, y: 1 },    // Top-right
+  { x: 1, y: 23 },    // Bottom-left
+  { x: 38, y: 23 },   // Bottom-right
+  { x: 20, y: 12 },   // Center
+  { x: 10, y: 12 },   // Mid-left
+  { x: 30, y: 12 },   // Mid-right
+  { x: 20, y: 6 },    // Mid-top
 ]
 
 interface Player {
@@ -109,11 +119,12 @@ export default class TankGameServer implements Party.Server {
     console.log(`Player disconnected: ${conn.id}`)
     this.connections.delete(conn.id)
 
-    // Remove player from state
-    this.state.players = this.state.players.filter((p) => p.id !== conn.id)
-
-    // Broadcast updated player list
-    this.broadcastPlayersUpdate()
+    // Only remove player if game hasn't started
+    // During gameplay, keep the player so they can reconnect
+    if (this.state.gameStatus !== 'playing') {
+      this.state.players = this.state.players.filter((p) => p.id !== conn.id)
+      this.broadcastPlayersUpdate()
+    }
 
     // Check for game over
     if (this.state.gameStatus === 'playing') {
@@ -144,8 +155,23 @@ export default class TankGameServer implements Party.Server {
   }
 
   private handleJoin(conn: Party.Connection, name: string, isHost: boolean) {
-    // Check if player already exists
+    // Check if player already exists by connection ID
     if (this.state.players.some((p) => p.id === conn.id)) {
+      return
+    }
+
+    // Check if this is a reconnecting player (same name exists)
+    const normalizedName = name.slice(0, 12).toUpperCase()
+    const existingPlayerIndex = this.state.players.findIndex(
+      (p) => p.name === normalizedName
+    )
+
+    if (existingPlayerIndex !== -1) {
+      // Update existing player's connection ID
+      const existingPlayer = this.state.players[existingPlayerIndex]
+      existingPlayer.id = conn.id
+      existingPlayer.isHost = existingPlayer.isHost || isHost
+      this.broadcastPlayersUpdate()
       return
     }
 
@@ -162,7 +188,7 @@ export default class TankGameServer implements Party.Server {
     // Create player
     const player: Player = {
       id: conn.id,
-      name: name.slice(0, 12).toUpperCase(),
+      name: normalizedName,
       color: TANK_COLORS[spawnIndex % TANK_COLORS.length],
       x: spawn.x * TILE_SIZE + TILE_SIZE / 2,
       y: spawn.y * TILE_SIZE + TILE_SIZE / 2,
