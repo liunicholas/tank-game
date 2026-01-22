@@ -5,37 +5,47 @@ import { GameClient } from '../network/GameClient'
 import { Tank } from '../entities/Tank'
 import { Bullet } from '../entities/Bullet'
 
-// Default map layout (20x15 tiles = 640x480)
+// Default map layout (40x25 tiles = 1280x800)
 const DEFAULT_MAP: GameMap = {
-  width: 20,
-  height: 15,
+  width: 40,
+  height: 25,
   tileSize: TILE_SIZE,
   tiles: [
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,1],
-    [1,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,1],
-    [1,0,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,1],
-    [1,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,2,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,2,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,1,1,1,1,1,1,0,0,1,0,0,0,1,1,1,1,1,1,1,1,0,0,0,1,0,0,1,1,1,1,1,1,0,0,0,1],
+    [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+    [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+    [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+    [1,0,0,0,1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,1,1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,0,0,0,1,1,1,0,0,1,0,0,0,0,0,2,0,0,0,0,1,0,0,1,1,1,0,0,0,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,1,1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,0,0,0,1],
+    [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+    [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+    [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+    [1,0,0,0,1,1,1,1,1,1,0,0,1,0,0,0,1,1,1,1,1,1,1,1,0,0,0,1,0,0,1,1,1,1,1,1,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,2,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,2,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
   ],
   spawnPoints: [
-    { x: 1, y: 1 },
-    { x: 18, y: 1 },
-    { x: 1, y: 13 },
-    { x: 18, y: 13 },
-    { x: 9, y: 7 },
-    { x: 10, y: 7 },
-    { x: 5, y: 5 },
-    { x: 14, y: 9 },
+    { x: 1, y: 1 },     // Top-left
+    { x: 38, y: 1 },    // Top-right
+    { x: 1, y: 23 },    // Bottom-left
+    { x: 38, y: 23 },   // Bottom-right
+    { x: 20, y: 12 },   // Center
+    { x: 10, y: 12 },   // Mid-left
+    { x: 30, y: 12 },   // Mid-right
+    { x: 20, y: 6 },    // Mid-top
   ],
 }
 
@@ -48,6 +58,7 @@ export class GameScene extends Phaser.Scene {
   private wasd!: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key }
   private spaceKey!: Phaser.Input.Keyboard.Key
   private playerId!: string
+  private playerName!: string
   private inputSeq: number = 0
   private lastFireTime: number = 0
   private fireDelay: number = 500 // ms between shots
@@ -77,11 +88,26 @@ export class GameScene extends Phaser.Scene {
     // Connect to game server
     this.client = new GameClient(roomId)
     this.setupNetworkHandlers()
+
+    // Get player info from registry
+    this.playerName = (this.registry.get('playerName') as string).toUpperCase()
+
+    // Set up connection handler to join after connecting
+    this.client.onConnect(() => {
+      this.client.sendJoin(this.playerName, false) // Re-join with same name
+    })
+
+    // Handle player ID updates (for reconnection)
+    this.client.onPlayerIdAssigned((newId: string) => {
+      this.playerId = newId
+    })
+
     this.client.connect()
 
-    // Create initial tanks for all players
+    // Create initial tanks for all players (keyed by name for stable lookup across reconnections)
     players.forEach((player, index) => {
       const spawn = this.map.spawnPoints[index % this.map.spawnPoints.length]
+      const playerNameKey = player.name.toUpperCase()
       const tank = new Tank(
         this,
         spawn.x * TILE_SIZE + TILE_SIZE / 2,
@@ -89,9 +115,9 @@ export class GameScene extends Phaser.Scene {
         player.id,
         player.name,
         index,
-        player.id === this.playerId
+        playerNameKey === this.playerName
       )
-      this.tanks.set(player.id, tank)
+      this.tanks.set(playerNameKey, tank)
 
       // Add collision with walls
       this.physics.add.collider(tank.sprite, this.walls)
@@ -149,17 +175,25 @@ export class GameScene extends Phaser.Scene {
     })
 
     this.client.onPlayerHit((targetId: string, livesRemaining: number) => {
-      const tank = this.tanks.get(targetId)
-      if (tank) {
-        tank.setLives(livesRemaining)
-        tank.playHitEffect()
+      // Find player name from game state (tanks are keyed by name)
+      const playerState = this.gameState?.players.find((p) => p.id === targetId)
+      if (playerState) {
+        const tank = this.tanks.get(playerState.name.toUpperCase())
+        if (tank) {
+          tank.setLives(livesRemaining)
+          tank.playHitEffect()
+        }
       }
     })
 
     this.client.onPlayerEliminated((playerId: string) => {
-      const tank = this.tanks.get(playerId)
-      if (tank) {
-        tank.eliminate()
+      // Find player name from game state (tanks are keyed by name)
+      const playerState = this.gameState?.players.find((p) => p.id === playerId)
+      if (playerState) {
+        const tank = this.tanks.get(playerState.name.toUpperCase())
+        if (tank) {
+          tank.eliminate()
+        }
       }
     })
 
@@ -169,12 +203,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateFromServer(state: GameState) {
-    // Update tank positions from server state
+    // Update tank positions from server state (keyed by name for stable lookup)
     state.players.forEach((playerState) => {
-      const tank = this.tanks.get(playerState.id)
-      if (tank && playerState.id !== this.playerId) {
-        // Interpolate other players' positions
-        tank.setTargetPosition(playerState.x, playerState.y, playerState.rotation)
+      const playerNameKey = playerState.name.toUpperCase()
+      const tank = this.tanks.get(playerNameKey)
+      if (tank) {
+        if (playerNameKey === this.playerName) {
+          // Sync local player position directly from server (authoritative)
+          tank.sprite.setPosition(playerState.x, playerState.y)
+          tank.sprite.setRotation(playerState.rotation)
+        } else {
+          // Interpolate other players' positions
+          tank.setTargetPosition(playerState.x, playerState.y, playerState.rotation)
+        }
         tank.setLives(playerState.lives)
         tank.setInvulnerable(playerState.isInvulnerable)
       }
@@ -225,7 +266,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   handleInput(time: number) {
-    const myTank = this.tanks.get(this.playerId)
+    const myTank = this.tanks.get(this.playerName)
     if (!myTank || !myTank.isAlive) return
 
     // Calculate movement direction
