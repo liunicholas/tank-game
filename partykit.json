@@ -1,0 +1,4 @@
+{
+  "name": "tank-game",
+  "main": "party/index.ts"
+}
