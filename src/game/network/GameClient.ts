@@ -1,15 +1,18 @@
 import PartySocket from 'partysocket'
-import { ClientMessage, ServerMessage, GameState, PlayerInput } from '../types/game'
+import { ClientMessage, ServerMessage, GameState, PlayerInput, RoundResults } from '../types/game'
 
 type ConnectCallback = () => void
 type ErrorCallback = (error: Error) => void
-type PlayersUpdateCallback = (players: { id: string; name: string; color: string }[]) => void
+type PlayersUpdateCallback = (players: { id: string; name: string; color: string; isReady: boolean }[]) => void
 type PlayerIdCallback = (id: string) => void
 type GameStartCallback = () => void
-type StateUpdateCallback = (state: GameState) => void
-type PlayerHitCallback = (targetId: string, livesRemaining: number) => void
-type PlayerEliminatedCallback = (playerId: string) => void
+type StateUpdateCallback = (state: GameState, ackSeq?: number) => void
+type PlayerHitCallback = (targetId: string, attackerId: string, livesRemaining: number) => void
+type PlayerEliminatedCallback = (playerId: string, killerId: string) => void
 type GameOverCallback = (winnerId: string, winnerName: string) => void
+type CountdownCallback = (count: number) => void
+type RoundResultsCallback = (results: RoundResults) => void
+type ReadyStatusUpdateCallback = (playerId: string, isReady: boolean) => void
 
 export class GameClient {
   private socket: PartySocket | null = null
@@ -24,6 +27,9 @@ export class GameClient {
   private onPlayerHitCallback: PlayerHitCallback | null = null
   private onPlayerEliminatedCallback: PlayerEliminatedCallback | null = null
   private onGameOverCallback: GameOverCallback | null = null
+  private onCountdownCallback: CountdownCallback | null = null
+  private onRoundResultsCallback: RoundResultsCallback | null = null
+  private onReadyStatusUpdateCallback: ReadyStatusUpdateCallback | null = null
 
   constructor(roomId: string) {
     this.roomId = roomId
@@ -31,8 +37,6 @@ export class GameClient {
 
   connect() {
     // Connect to PartyKit server
-    // In development, this will be localhost:1999
-    // In production, this will be your PartyKit deployment URL
     const host = process.env.NEXT_PUBLIC_PARTYKIT_HOST || 'localhost:1999'
 
     this.socket = new PartySocket({
@@ -80,19 +84,31 @@ export class GameClient {
         break
 
       case 'state_update':
-        this.onStateUpdateCallback?.(message.state)
+        this.onStateUpdateCallback?.(message.state, message.ackSeq)
         break
 
       case 'player_hit':
-        this.onPlayerHitCallback?.(message.targetId, message.livesRemaining)
+        this.onPlayerHitCallback?.(message.targetId, message.attackerId, message.livesRemaining)
         break
 
       case 'player_eliminated':
-        this.onPlayerEliminatedCallback?.(message.playerId)
+        this.onPlayerEliminatedCallback?.(message.playerId, message.killerId)
         break
 
       case 'game_over':
         this.onGameOverCallback?.(message.winnerId, message.winnerName)
+        break
+
+      case 'countdown':
+        this.onCountdownCallback?.(message.count)
+        break
+
+      case 'round_results':
+        this.onRoundResultsCallback?.(message.results)
+        break
+
+      case 'ready_status_update':
+        this.onReadyStatusUpdateCallback?.(message.playerId, message.isReady)
         break
 
       case 'error':
@@ -118,6 +134,14 @@ export class GameClient {
 
   sendStartGame() {
     this.send({ type: 'start_game' })
+  }
+
+  sendToggleReady() {
+    this.send({ type: 'toggle_ready' })
+  }
+
+  sendReturnToLobby() {
+    this.send({ type: 'return_to_lobby' })
   }
 
   disconnect() {
@@ -160,5 +184,17 @@ export class GameClient {
 
   onGameOver(callback: GameOverCallback) {
     this.onGameOverCallback = callback
+  }
+
+  onCountdown(callback: CountdownCallback) {
+    this.onCountdownCallback = callback
+  }
+
+  onRoundResults(callback: RoundResultsCallback) {
+    this.onRoundResultsCallback = callback
+  }
+
+  onReadyStatusUpdate(callback: ReadyStatusUpdateCallback) {
+    this.onReadyStatusUpdateCallback = callback
   }
 }

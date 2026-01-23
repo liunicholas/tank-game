@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { TANK_SPEED, MAX_LIVES, TANK_SIZE } from '../config'
+import { EffectsManager } from '../effects/EffectsManager'
 
 export class Tank {
   public sprite: Phaser.Physics.Arcade.Sprite
@@ -17,6 +18,7 @@ export class Tank {
   private targetRotation: number = 0
   private isInvulnerable: boolean = false
   private invulnerabilityTween: Phaser.Tweens.Tween | null = null
+  private effects: EffectsManager | null = null
 
   constructor(
     scene: Phaser.Scene,
@@ -25,7 +27,8 @@ export class Tank {
     id: string,
     name: string,
     colorIndex: number,
-    isLocalPlayer: boolean
+    isLocalPlayer: boolean,
+    effects?: EffectsManager
   ) {
     this.scene = scene
     this.id = id
@@ -34,25 +37,43 @@ export class Tank {
     this.isLocalPlayer = isLocalPlayer
     this.targetX = x
     this.targetY = y
+    this.effects = effects || null
 
     // Create tank sprite
     this.sprite = scene.physics.add.sprite(x, y, `tank_${colorIndex}`)
-    this.sprite.setScale(2) // Scale up for 8-bit look
+    this.sprite.setScale(1.5) // Adjusted scale for new 24x24 sprites
     this.sprite.setCollideWorldBounds(true)
     this.sprite.setSize(TANK_SIZE, TANK_SIZE)
     this.sprite.setData('tankId', id)
 
     // Create name text above tank
-    this.nameText = scene.add.text(x, y - 30, name.toUpperCase(), {
+    this.nameText = scene.add.text(x, y - 35, name.toUpperCase(), {
       fontFamily: '"Press Start 2P", monospace',
       fontSize: '8px',
       color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2,
     })
     this.nameText.setOrigin(0.5)
+    this.nameText.setDepth(100)
 
     // Create lives display (hearts)
     this.livesDisplay = scene.add.group()
     this.updateLivesDisplay()
+
+    // Create spawn effect
+    if (this.effects) {
+      const color = this.getColor()
+      this.effects.createSpawnEffect(x, y, color)
+    }
+  }
+
+  private getColor(): string {
+    const TANK_COLORS = [
+      '#ffb3ba', '#bae1ff', '#baffc9', '#ffffba',
+      '#e0b3ff', '#ffdfba', '#b3ffff', '#ffc9ba',
+    ]
+    return TANK_COLORS[this.colorIndex % TANK_COLORS.length]
   }
 
   updateLivesDisplay() {
@@ -62,8 +83,9 @@ export class Tank {
     // Create hearts based on current lives
     const startX = this.sprite.x - ((this.lives - 1) * 8)
     for (let i = 0; i < this.lives; i++) {
-      const heart = this.scene.add.image(startX + i * 16, this.sprite.y - 45, 'heart')
+      const heart = this.scene.add.image(startX + i * 16, this.sprite.y - 50, 'heart')
       heart.setScale(1)
+      heart.setDepth(100)
       this.livesDisplay.add(heart)
     }
   }
@@ -92,8 +114,14 @@ export class Tank {
 
   setLives(lives: number) {
     if (this.lives !== lives) {
+      const lostLives = this.lives > lives
       this.lives = lives
       this.updateLivesDisplay()
+
+      // Show damage indicator if lost life
+      if (lostLives && this.effects) {
+        this.effects.createDamageIndicator(this.sprite.x, this.sprite.y - 20, 1)
+      }
     }
   }
 
@@ -129,8 +157,9 @@ export class Tank {
     })
 
     // Screen shake for local player
-    if (this.isLocalPlayer) {
-      this.scene.cameras.main.shake(100, 0.01)
+    if (this.isLocalPlayer && this.effects) {
+      this.effects.screenShake(0.015, 150)
+      this.effects.screenFlash(0xff0000, 80)
     }
   }
 
@@ -140,15 +169,11 @@ export class Tank {
     this.nameText.setVisible(false)
     this.livesDisplay.setVisible(false)
 
-    // Play explosion effect
-    const explosion = this.scene.add.circle(this.sprite.x, this.sprite.y, 20, 0xffffff)
-    this.scene.tweens.add({
-      targets: explosion,
-      alpha: 0,
-      scale: 3,
-      duration: 300,
-      onComplete: () => explosion.destroy(),
-    })
+    // Stop invulnerability effect
+    if (this.invulnerabilityTween) {
+      this.invulnerabilityTween.stop()
+      this.invulnerabilityTween = null
+    }
   }
 
   update(delta: number) {
@@ -163,13 +188,13 @@ export class Tank {
     }
 
     // Update UI elements position
-    this.nameText.setPosition(this.sprite.x, this.sprite.y - 30)
+    this.nameText.setPosition(this.sprite.x, this.sprite.y - 35)
 
     // Update hearts position
     const hearts = this.livesDisplay.getChildren() as Phaser.GameObjects.Image[]
     const startX = this.sprite.x - ((hearts.length - 1) * 8)
     hearts.forEach((heart, i) => {
-      heart.setPosition(startX + i * 16, this.sprite.y - 45)
+      heart.setPosition(startX + i * 16, this.sprite.y - 50)
     })
   }
 

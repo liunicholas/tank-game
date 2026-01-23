@@ -1,9 +1,11 @@
 'use client'
 
 import { useParams, useSearchParams } from 'next/navigation'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Lobby from '@/components/Lobby'
+import { GameClient } from '@/game/network/GameClient'
+import { RoundResults } from '@/game/types/game'
 
 // Dynamically import GameCanvas with no SSR (Phaser needs browser APIs)
 const GameCanvas = dynamic(() => import('@/components/GameCanvas'), {
@@ -15,6 +17,8 @@ const GameCanvas = dynamic(() => import('@/components/GameCanvas'), {
   ),
 })
 
+type GamePhase = 'lobby' | 'countdown' | 'playing' | 'results'
+
 export default function GameRoom() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -23,21 +27,65 @@ export default function GameRoom() {
   const playerName = searchParams.get('name') || 'PLAYER'
   const isHost = searchParams.get('host') === 'true'
 
-  const [gameStarted, setGameStarted] = useState(false)
-  const [players, setPlayers] = useState<{ id: string; name: string; color: string }[]>([])
+  const [gamePhase, setGamePhase] = useState<GamePhase>('lobby')
+  const [players, setPlayers] = useState<{ id: string; name: string; color: string; isReady: boolean }[]>([])
   const [playerId, setPlayerId] = useState<string>('')
+  const [countdownValue, setCountdownValue] = useState<number>(3)
+  const [roundResults, setRoundResults] = useState<RoundResults | null>(null)
+  const lobbyClientRef = useRef<GameClient | null>(null)
 
   const handleGameStart = useCallback(() => {
-    setGameStarted(true)
+    // Don't immediately switch to playing - wait for countdown
   }, [])
 
-  const handlePlayersUpdate = useCallback((newPlayers: { id: string; name: string; color: string }[]) => {
+  const handlePlayersUpdate = useCallback((newPlayers: { id: string; name: string; color: string; isReady: boolean }[]) => {
     setPlayers(newPlayers)
   }, [])
 
   const handlePlayerIdAssigned = useCallback((id: string) => {
     setPlayerId(id)
   }, [])
+
+  const handleCountdown = useCallback((count: number) => {
+    setCountdownValue(count)
+    if (gamePhase === 'lobby') {
+      setGamePhase('countdown')
+    }
+  }, [gamePhase])
+
+  const handleRoundResults = useCallback((results: RoundResults) => {
+    setRoundResults(results)
+    setGamePhase('results')
+  }, [])
+
+  // Setup lobby client for receiving countdown/results messages
+  useEffect(() => {
+    if (gamePhase === 'lobby' && !lobbyClientRef.current) {
+      // The Lobby component handles its own connection
+      return
+    }
+  }, [gamePhase])
+
+  // Handle phase-specific initial data for GameCanvas
+  const getInitialSceneData = () => {
+    switch (gamePhase) {
+      case 'countdown':
+        return { initialScene: 'CountdownScene', initialData: { count: countdownValue } }
+      case 'playing':
+        return { initialScene: 'BootScene', initialData: {} }
+      case 'results':
+        return {
+          initialScene: 'ResultsScene',
+          initialData: {
+            results: roundResults,
+            playerId,
+            players
+          }
+        }
+      default:
+        return { initialScene: 'BootScene', initialData: {} }
+    }
+  }
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -49,7 +97,7 @@ export default function GameRoom() {
         </div>
       </div>
 
-      {!gameStarted ? (
+      {gamePhase === 'lobby' ? (
         <Lobby
           roomId={roomId}
           playerName={playerName}
@@ -58,13 +106,16 @@ export default function GameRoom() {
           onPlayersUpdate={handlePlayersUpdate}
           onGameStart={handleGameStart}
           onPlayerIdAssigned={handlePlayerIdAssigned}
+          onCountdown={handleCountdown}
         />
       ) : (
         <GameCanvas
+          key={`${gamePhase}-${roundResults?.round || 0}`}
           roomId={roomId}
           playerId={playerId}
           playerName={playerName}
           players={players}
+          {...getInitialSceneData()}
         />
       )}
 

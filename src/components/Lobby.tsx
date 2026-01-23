@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { GameClient } from '@/game/network/GameClient'
 
 const TANK_COLORS = [
@@ -18,6 +18,7 @@ interface Player {
   id: string
   name: string
   color: string
+  isReady: boolean
 }
 
 interface LobbyProps {
@@ -28,6 +29,7 @@ interface LobbyProps {
   onPlayersUpdate: (players: Player[]) => void
   onGameStart: () => void
   onPlayerIdAssigned: (id: string) => void
+  onCountdown?: (count: number) => void
 }
 
 export default function Lobby({
@@ -38,6 +40,7 @@ export default function Lobby({
   onPlayersUpdate,
   onGameStart,
   onPlayerIdAssigned,
+  onCountdown,
 }: LobbyProps) {
   const clientRef = useRef<GameClient | null>(null)
   const [connected, setConnected] = useState(false)
@@ -48,12 +51,14 @@ export default function Lobby({
   const onPlayersUpdateRef = useRef(onPlayersUpdate)
   const onGameStartRef = useRef(onGameStart)
   const onPlayerIdAssignedRef = useRef(onPlayerIdAssigned)
+  const onCountdownRef = useRef(onCountdown)
 
   // Keep refs up to date
   useEffect(() => {
     onPlayersUpdateRef.current = onPlayersUpdate
     onGameStartRef.current = onGameStart
     onPlayerIdAssignedRef.current = onPlayerIdAssigned
+    onCountdownRef.current = onCountdown
   })
 
   useEffect(() => {
@@ -83,6 +88,10 @@ export default function Lobby({
 
     client.onGameStart(() => {
       onGameStartRef.current()
+    })
+
+    client.onCountdown((count) => {
+      onCountdownRef.current?.(count)
     })
 
     client.connect()

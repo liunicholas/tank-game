@@ -1,3 +1,10 @@
+// Player stats for tracking performance
+export interface PlayerStats {
+  kills: number
+  deaths: number
+  wins: number
+}
+
 // Player state synchronized across network
 export interface PlayerState {
   id: string
@@ -9,6 +16,7 @@ export interface PlayerState {
   lives: number
   isAlive: boolean
   isInvulnerable: boolean
+  isReady: boolean
 }
 
 // Bullet state synchronized across network
@@ -21,13 +29,26 @@ export interface BulletState {
   velocityY: number
 }
 
+// Game statuses
+export type GameStatus = 'waiting' | 'countdown' | 'playing' | 'results'
+
 // Complete game state from server
 export interface GameState {
   tick: number
   players: PlayerState[]
   bullets: BulletState[]
-  gameStatus: 'waiting' | 'playing' | 'ended'
+  gameStatus: GameStatus
   winnerId?: string
+  round: number
+  timeRemaining?: number
+}
+
+// Round results data
+export interface RoundResults {
+  winnerId: string
+  winnerName: string
+  playerStats: { [playerId: string]: PlayerStats }
+  round: number
 }
 
 // Input from client to server
@@ -45,16 +66,21 @@ export type ClientMessage =
   | { type: 'join'; name: string; isHost: boolean }
   | { type: 'input'; seq: number; dx: number; dy: number; fire: boolean; rotation: number }
   | { type: 'start_game' }
+  | { type: 'toggle_ready' }
+  | { type: 'return_to_lobby' }
 
 // Messages from server to client
 export type ServerMessage =
   | { type: 'player_id'; id: string }
-  | { type: 'players_update'; players: { id: string; name: string; color: string }[] }
+  | { type: 'players_update'; players: { id: string; name: string; color: string; isReady: boolean }[] }
   | { type: 'game_start'; state: GameState }
-  | { type: 'state_update'; state: GameState }
-  | { type: 'player_hit'; targetId: string; livesRemaining: number }
-  | { type: 'player_eliminated'; playerId: string }
+  | { type: 'state_update'; state: GameState; ackSeq?: number }
+  | { type: 'player_hit'; targetId: string; attackerId: string; livesRemaining: number }
+  | { type: 'player_eliminated'; playerId: string; killerId: string }
   | { type: 'game_over'; winnerId: string; winnerName: string }
+  | { type: 'countdown'; count: number }
+  | { type: 'round_results'; results: RoundResults }
+  | { type: 'ready_status_update'; playerId: string; isReady: boolean }
   | { type: 'error'; message: string }
 
 // Tank color definitions

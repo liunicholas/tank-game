@@ -6,11 +6,14 @@ import { GameConfig } from '@/game/config'
 import { BootScene } from '@/game/scenes/BootScene'
 import { GameScene } from '@/game/scenes/GameScene'
 import { GameOverScene } from '@/game/scenes/GameOverScene'
+import { ResultsScene } from '@/game/scenes/ResultsScene'
+import { CountdownScene } from '@/game/scenes/CountdownScene'
 
 interface Player {
   id: string
   name: string
   color: string
+  isReady?: boolean
 }
 
 interface GameCanvasProps {
@@ -18,9 +21,18 @@ interface GameCanvasProps {
   playerId: string
   playerName: string
   players: Player[]
+  initialScene?: string
+  initialData?: object
 }
 
-export default function GameCanvas({ roomId, playerId, playerName, players }: GameCanvasProps) {
+export default function GameCanvas({
+  roomId,
+  playerId,
+  playerName,
+  players,
+  initialScene = 'BootScene',
+  initialData = {}
+}: GameCanvasProps) {
   const gameRef = useRef<Phaser.Game | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -30,7 +42,7 @@ export default function GameCanvas({ roomId, playerId, playerName, players }: Ga
     const config: Phaser.Types.Core.GameConfig = {
       ...GameConfig,
       parent: containerRef.current,
-      scene: [BootScene, GameScene, GameOverScene],
+      scene: [BootScene, GameScene, GameOverScene, ResultsScene, CountdownScene],
       callbacks: {
         preBoot: (game) => {
           // Pass game data to scenes via registry
@@ -38,6 +50,8 @@ export default function GameCanvas({ roomId, playerId, playerName, players }: Ga
           game.registry.set('playerId', playerId)
           game.registry.set('playerName', playerName)
           game.registry.set('players', players)
+          game.registry.set('initialScene', initialScene)
+          game.registry.set('initialData', initialData)
         },
       },
     }
@@ -50,7 +64,7 @@ export default function GameCanvas({ roomId, playerId, playerName, players }: Ga
         gameRef.current = null
       }
     }
-  }, [roomId, playerId, playerName, players])
+  }, [roomId, playerId, playerName, players, initialScene, initialData])
 
   return (
     <div

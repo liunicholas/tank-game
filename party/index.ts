@@ -15,6 +15,7 @@ const RESPAWN_INVULNERABILITY_MS = 2000
 const TICK_RATE = 20
 const TICK_INTERVAL = 1000 / TICK_RATE
 const GAME_DURATION_MS = 3 * 60 * 1000 // 3 minutes
+const COUNTDOWN_DURATION = 3 // 3 seconds
 
 // Map layout (40x25 tiles = 1280x800)
 const MAP_WIDTH = 40
@@ -58,6 +59,12 @@ const SPAWN_POINTS = [
   { x: 20, y: 6 },    // Mid-top
 ]
 
+interface PlayerStats {
+  kills: number
+  deaths: number
+  wins: number
+}
+
 interface Player {
   id: string
   name: string
@@ -73,6 +80,8 @@ interface Player {
   invulnerabilityEndTime: number
   lastBulletTime: number
   isHost: boolean
+  isReady: boolean
+  lastProcessedSeq: number
 }
 
 interface Bullet {
@@ -84,14 +93,17 @@ interface Bullet {
   velocityY: number
 }
 
+type GameStatus = 'waiting' | 'countdown' | 'playing' | 'results'
+
 interface GameState {
   tick: number
   players: Player[]
   bullets: Bullet[]
-  gameStatus: 'waiting' | 'playing' | 'ended'
+  gameStatus: GameStatus
   winnerId?: string
   winnerName?: string
   gameStartTime?: number
+  round: number
 }
 
 export default class TankGameServer implements Party.Server {
@@ -100,10 +112,13 @@ export default class TankGameServer implements Party.Server {
     players: [],
     bullets: [],
     gameStatus: 'waiting',
+    round: 0,
   }
   private connections: Map<string, Party.Connection> = new Map()
   private gameLoop: ReturnType<typeof setInterval> | null = null
+  private countdownTimer: ReturnType<typeof setTimeout> | null = null
   private bulletIdCounter = 0
+  private playerStats: Map<string, PlayerStats> = new Map()
 
   constructor(readonly room: Party.Room) {}
 
@@ -121,7 +136,7 @@ export default class TankGameServer implements Party.Server {
 
     // Only remove player if game hasn't started
     // During gameplay, keep the player so they can reconnect
-    if (this.state.gameStatus !== 'playing') {
+    if (this.state.gameStatus === 'waiting') {
       this.state.players = this.state.players.filter((p) => p.id !== conn.id)
       this.broadcastPlayersUpdate()
     }
@@ -147,6 +162,14 @@ export default class TankGameServer implements Party.Server {
 
         case 'start_game':
           this.handleStartGame(sender.id)
+          break
+
+        case 'toggle_ready':
+          this.handleToggleReady(sender.id)
+          break
+
+        case 'return_to_lobby':
+          this.handleReturnToLobby(sender.id)
           break
       }
     } catch (e) {
@@ -201,15 +224,26 @@ export default class TankGameServer implements Party.Server {
       invulnerabilityEndTime: 0,
       lastBulletTime: 0,
       isHost: isHost || this.state.players.length === 0,
+      isReady: false,
+      lastProcessedSeq: 0,
     }
 
     this.state.players.push(player)
+
+    // Initialize stats if not exists
+    if (!this.playerStats.has(conn.id)) {
+      this.playerStats.set(conn.id, { kills: 0, deaths: 0, wins: 0 })
+    }
+
     this.broadcastPlayersUpdate()
   }
 
-  private handleInput(playerId: string, input: { dx: number; dy: number; fire: boolean; rotation: number }) {
+  private handleInput(playerId: string, input: { seq: number; dx: number; dy: number; fire: boolean; rotation: number }) {
     const player = this.state.players.find((p) => p.id === playerId)
     if (!player || !player.isAlive || this.state.gameStatus !== 'playing') return
+
+    // Update last processed sequence
+    player.lastProcessedSeq = input.seq
 
     // Update velocity based on input
     const magnitude = Math.sqrt(input.dx * input.dx + input.dy * input.dy)
@@ -263,6 +297,84 @@ export default class TankGameServer implements Party.Server {
     // Need at least 1 player
     if (this.state.players.length < 1) return
 
+    // Start countdown
+    this.startCountdown()
+  }
+
+  private handleToggleReady(playerId: string) {
+    const player = this.state.players.find((p) => p.id === playerId)
+    if (!player) return
+
+    player.isReady = !player.isReady
+
+    // Broadcast ready status update
+    this.broadcast({
+      type: 'ready_status_update',
+      playerId,
+      isReady: player.isReady,
+    })
+
+    this.broadcastPlayersUpdate()
+
+    // Check if all players are ready in results phase
+    if (this.state.gameStatus === 'results') {
+      this.checkAllReady()
+    }
+  }
+
+  private handleReturnToLobby(playerId: string) {
+    // Reset player to waiting state
+    const player = this.state.players.find((p) => p.id === playerId)
+    if (!player) return
+
+    // Remove player from game
+    this.state.players = this.state.players.filter((p) => p.id !== playerId)
+    this.playerStats.delete(playerId)
+    this.broadcastPlayersUpdate()
+  }
+
+  private checkAllReady() {
+    if (this.state.players.length < 1) return
+
+    const allReady = this.state.players.every((p) => p.isReady)
+    if (allReady) {
+      // Start new round countdown
+      this.startCountdown()
+    }
+  }
+
+  private startCountdown() {
+    this.state.gameStatus = 'countdown'
+
+    // Reset ready status
+    this.state.players.forEach((p) => {
+      p.isReady = false
+    })
+
+    let count = COUNTDOWN_DURATION
+
+    // Send initial countdown
+    this.broadcast({ type: 'countdown', count })
+
+    this.countdownTimer = setInterval(() => {
+      count--
+      if (count > 0) {
+        this.broadcast({ type: 'countdown', count })
+      } else {
+        // Countdown finished, start the game
+        if (this.countdownTimer) {
+          clearInterval(this.countdownTimer)
+          this.countdownTimer = null
+        }
+        this.startRound()
+      }
+    }, 1000)
+  }
+
+  private startRound() {
+    // Increment round counter
+    this.state.round++
+
     // Reset positions
     this.state.players.forEach((p, index) => {
       const spawn = SPAWN_POINTS[index % SPAWN_POINTS.length]
@@ -275,6 +387,7 @@ export default class TankGameServer implements Party.Server {
       p.isAlive = true
       p.isInvulnerable = true
       p.invulnerabilityEndTime = Date.now() + RESPAWN_INVULNERABILITY_MS
+      p.isReady = false
     })
 
     this.state.bullets = []
@@ -367,7 +480,7 @@ export default class TankGameServer implements Party.Server {
         if (distance < 16) {
           // Hit!
           bulletsToRemove.push(bullet.id)
-          this.handlePlayerHit(player)
+          this.handlePlayerHit(player, bullet.ownerId)
         }
       })
     })
@@ -383,11 +496,24 @@ export default class TankGameServer implements Party.Server {
       this.endGameByTime()
     }
 
-    // Broadcast state
+    // Broadcast state with ack seq per player
     this.state.tick++
-    this.broadcast({
-      type: 'state_update',
-      state: this.getPublicState(),
+    this.broadcastStateUpdate()
+  }
+
+  private broadcastStateUpdate() {
+    const baseState = this.getPublicState()
+
+    // Send state update to each player with their ack seq
+    this.state.players.forEach((player) => {
+      const conn = this.connections.get(player.id)
+      if (conn) {
+        conn.send(JSON.stringify({
+          type: 'state_update',
+          state: baseState,
+          ackSeq: player.lastProcessedSeq,
+        }))
+      }
     })
   }
 
@@ -430,20 +556,35 @@ export default class TankGameServer implements Party.Server {
     return false
   }
 
-  private handlePlayerHit(player: Player) {
+  private handlePlayerHit(player: Player, attackerId: string) {
     player.lives--
+
+    // Update attacker stats
+    const attackerStats = this.playerStats.get(attackerId)
+    if (attackerStats) {
+      attackerStats.kills++
+    }
 
     this.broadcast({
       type: 'player_hit',
       targetId: player.id,
+      attackerId,
       livesRemaining: player.lives,
     })
 
     if (player.lives <= 0) {
       player.isAlive = false
+
+      // Update victim stats
+      const victimStats = this.playerStats.get(player.id)
+      if (victimStats) {
+        victimStats.deaths++
+      }
+
       this.broadcast({
         type: 'player_eliminated',
         playerId: player.id,
+        killerId: attackerId,
       })
     } else {
       // Respawn with invulnerability
@@ -475,9 +616,9 @@ export default class TankGameServer implements Party.Server {
   }
 
   private endGame(winnerId: string, winnerName: string) {
-    if (this.state.gameStatus === 'ended') return
+    if (this.state.gameStatus === 'results') return
 
-    this.state.gameStatus = 'ended'
+    this.state.gameStatus = 'results'
     this.state.winnerId = winnerId
     this.state.winnerName = winnerName
 
@@ -486,14 +627,52 @@ export default class TankGameServer implements Party.Server {
       this.gameLoop = null
     }
 
+    // Update winner stats
+    const winnerStats = this.playerStats.get(winnerId)
+    if (winnerStats) {
+      winnerStats.wins++
+    }
+
+    // Reset ready status for all players
+    this.state.players.forEach((p) => {
+      p.isReady = false
+    })
+
+    // Build stats object for results
+    const statsObj: { [playerId: string]: { kills: number; deaths: number; wins: number } } = {}
+    this.state.players.forEach((p) => {
+      const stats = this.playerStats.get(p.id)
+      if (stats) {
+        statsObj[p.id] = { ...stats }
+      }
+    })
+
+    // Broadcast round results instead of game over
+    this.broadcast({
+      type: 'round_results',
+      results: {
+        winnerId,
+        winnerName,
+        playerStats: statsObj,
+        round: this.state.round,
+      },
+    })
+
+    // Also broadcast game_over for backwards compatibility
     this.broadcast({
       type: 'game_over',
       winnerId,
       winnerName,
     })
+
+    this.broadcastPlayersUpdate()
   }
 
   private getPublicState() {
+    const timeRemaining = this.state.gameStartTime
+      ? Math.max(0, GAME_DURATION_MS - (Date.now() - this.state.gameStartTime))
+      : GAME_DURATION_MS
+
     return {
       tick: this.state.tick,
       players: this.state.players.map((p) => ({
@@ -506,6 +685,7 @@ export default class TankGameServer implements Party.Server {
         lives: p.lives,
         isAlive: p.isAlive,
         isInvulnerable: p.isInvulnerable,
+        isReady: p.isReady,
       })),
       bullets: this.state.bullets.map((b) => ({
         id: b.id,
@@ -517,6 +697,8 @@ export default class TankGameServer implements Party.Server {
       })),
       gameStatus: this.state.gameStatus,
       winnerId: this.state.winnerId,
+      round: this.state.round,
+      timeRemaining,
     }
   }
 
@@ -527,6 +709,7 @@ export default class TankGameServer implements Party.Server {
         id: p.id,
         name: p.name,
         color: p.color,
+        isReady: p.isReady,
       })),
     })
   }

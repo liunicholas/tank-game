@@ -1,7 +1,12 @@
 import Phaser from 'phaser'
-import { TILE_SIZE, TANK_SPEED, BULLET_SPEED, TANK_SIZE, MAX_LIVES, RESPAWN_INVULNERABILITY_MS } from '../config'
-import { GameState, PlayerState, BulletState, TileType, GameMap } from '../types/game'
+import { TILE_SIZE, TANK_SPEED, TANK_SIZE } from '../config'
+import { GameState, PlayerState, BulletState, TileType, GameMap, RoundResults } from '../types/game'
 import { GameClient } from '../network/GameClient'
+import { InputBuffer } from '../network/InputBuffer'
+import { PredictionSystem, Position } from '../network/PredictionSystem'
+import { EffectsManager } from '../effects/EffectsManager'
+import { GameHUD } from '../ui/GameHUD'
+import { KillFeed } from '../ui/KillFeed'
 import { Tank } from '../entities/Tank'
 import { Bullet } from '../entities/Bullet'
 
@@ -38,14 +43,14 @@ const DEFAULT_MAP: GameMap = {
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
   ],
   spawnPoints: [
-    { x: 1, y: 1 },     // Top-left
-    { x: 38, y: 1 },    // Top-right
-    { x: 1, y: 23 },    // Bottom-left
-    { x: 38, y: 23 },   // Bottom-right
-    { x: 20, y: 12 },   // Center
-    { x: 10, y: 12 },   // Mid-left
-    { x: 30, y: 12 },   // Mid-right
-    { x: 20, y: 6 },    // Mid-top
+    { x: 1, y: 1 },
+    { x: 38, y: 1 },
+    { x: 1, y: 23 },
+    { x: 38, y: 23 },
+    { x: 20, y: 12 },
+    { x: 10, y: 12 },
+    { x: 30, y: 12 },
+    { x: 20, y: 6 },
   ],
 }
 
@@ -54,16 +59,32 @@ export class GameScene extends Phaser.Scene {
   private tanks: Map<string, Tank> = new Map()
   private bullets: Map<string, Bullet> = new Map()
   private walls!: Phaser.Physics.Arcade.StaticGroup
-  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private wasd!: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key }
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private spaceKey!: Phaser.Input.Keyboard.Key
   private playerId!: string
   private playerName!: string
   private inputSeq: number = 0
   private lastFireTime: number = 0
-  private fireDelay: number = 500 // ms between shots
+  private fireDelay: number = 500
   private gameState: GameState | null = null
   private map: GameMap = DEFAULT_MAP
+
+  // New systems
+  private inputBuffer!: InputBuffer
+  private predictionSystem!: PredictionSystem
+  private effects!: EffectsManager
+  private hud!: GameHUD
+  private killFeed!: KillFeed
+
+  // Player tracking for kill feed
+  private playerColors: Map<string, string> = new Map()
+  private playerNames: Map<string, string> = new Map()
+  private currentRound: number = 1
+  private roundResults: RoundResults | null = null
+
+  // Track if player was moving last frame (for sending stop inputs)
+  private wasMoving: boolean = false
 
   constructor() {
     super({ key: 'GameScene' })
@@ -74,6 +95,19 @@ export class GameScene extends Phaser.Scene {
     const roomId = this.registry.get('roomId') as string
     this.playerId = this.registry.get('playerId') as string
     const players = this.registry.get('players') as { id: string; name: string; color: string }[]
+
+    // Store player info for kill feed
+    players.forEach((p) => {
+      this.playerColors.set(p.id, p.color)
+      this.playerNames.set(p.id, p.name)
+    })
+
+    // Initialize prediction systems
+    this.inputBuffer = new InputBuffer()
+    this.predictionSystem = new PredictionSystem(this.inputBuffer)
+
+    // Initialize effects
+    this.effects = new EffectsManager(this)
 
     // Create tilemap
     this.createMap()
@@ -94,7 +128,7 @@ export class GameScene extends Phaser.Scene {
 
     // Set up connection handler to join after connecting
     this.client.onConnect(() => {
-      this.client.sendJoin(this.playerName, false) // Re-join with same name
+      this.client.sendJoin(this.playerName, false)
     })
 
     // Handle player ID updates (for reconnection)
@@ -104,7 +138,7 @@ export class GameScene extends Phaser.Scene {
 
     this.client.connect()
 
-    // Create initial tanks for all players (keyed by name for stable lookup across reconnections)
+    // Create initial tanks for all players
     players.forEach((player, index) => {
       const spawn = this.map.spawnPoints[index % this.map.spawnPoints.length]
       const playerNameKey = player.name.toUpperCase()
@@ -115,7 +149,8 @@ export class GameScene extends Phaser.Scene {
         player.id,
         player.name,
         index,
-        playerNameKey === this.playerName
+        playerNameKey === this.playerName,
+        this.effects
       )
       this.tanks.set(playerNameKey, tank)
 
@@ -123,12 +158,16 @@ export class GameScene extends Phaser.Scene {
       this.physics.add.collider(tank.sprite, this.walls)
     })
 
-    // Add UI text
-    this.add.text(10, 10, 'WASD: MOVE | SPACE: FIRE', {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: '8px',
-      color: '#666666',
+    // Initialize HUD
+    this.hud = new GameHUD(this, {
+      playerId: this.playerId,
+      playerName: this.playerName,
+      round: this.currentRound,
+      totalTime: 180000,
     })
+
+    // Initialize Kill Feed
+    this.killFeed = new KillFeed(this, 20, 70)
   }
 
   createMap() {
@@ -164,60 +203,135 @@ export class GameScene extends Phaser.Scene {
       S: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
       D: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     }
-    this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
     this.cursors = this.input.keyboard.createCursorKeys()
+    this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
   }
 
   setupNetworkHandlers() {
-    this.client.onStateUpdate((state: GameState) => {
+    this.client.onStateUpdate((state: GameState, ackSeq?: number) => {
       this.gameState = state
-      this.updateFromServer(state)
+      this.updateFromServer(state, ackSeq)
+
+      // Update HUD timer
+      if (state.timeRemaining !== undefined) {
+        this.hud.updateTimer(state.timeRemaining)
+      }
+
+      // Update round
+      if (state.round !== this.currentRound) {
+        this.currentRound = state.round
+        this.hud.updateRound(state.round)
+      }
     })
 
-    this.client.onPlayerHit((targetId: string, livesRemaining: number) => {
-      // Find player name from game state (tanks are keyed by name)
-      const playerState = this.gameState?.players.find((p) => p.id === targetId)
-      if (playerState) {
-        const tank = this.tanks.get(playerState.name.toUpperCase())
+    this.client.onPlayerHit((targetId: string, attackerId: string, livesRemaining: number) => {
+      const targetState = this.gameState?.players.find((p) => p.id === targetId)
+      if (targetState) {
+        const tank = this.tanks.get(targetState.name.toUpperCase())
         if (tank) {
           tank.setLives(livesRemaining)
           tank.playHitEffect()
         }
-      }
-    })
 
-    this.client.onPlayerEliminated((playerId: string) => {
-      // Find player name from game state (tanks are keyed by name)
-      const playerState = this.gameState?.players.find((p) => p.id === playerId)
-      if (playerState) {
-        const tank = this.tanks.get(playerState.name.toUpperCase())
-        if (tank) {
-          tank.eliminate()
+        // Add to kill feed if attacker and target are different
+        if (attackerId !== targetId) {
+          const attackerName = this.playerNames.get(attackerId) || 'Unknown'
+          const attackerColor = this.playerColors.get(attackerId) || '#ffffff'
+          const targetName = this.playerNames.get(targetId) || 'Unknown'
+          const targetColor = this.playerColors.get(targetId) || '#ffffff'
+          this.killFeed.addKill(attackerName, attackerColor, targetName, targetColor)
         }
       }
     })
 
+    this.client.onPlayerEliminated((playerId: string, killerId: string) => {
+      const playerState = this.gameState?.players.find((p) => p.id === playerId)
+      if (playerState) {
+        const tank = this.tanks.get(playerState.name.toUpperCase())
+        if (tank) {
+          // Create death effect before eliminating
+          this.effects.createDeathEffect(tank.sprite.x, tank.sprite.y, playerState.color)
+          tank.eliminate()
+        }
+
+        // Add elimination to kill feed
+        const killerName = this.playerNames.get(killerId) || 'Unknown'
+        const killerColor = this.playerColors.get(killerId) || '#ffffff'
+        const victimName = this.playerNames.get(playerId) || 'Unknown'
+        const victimColor = this.playerColors.get(playerId) || '#ffffff'
+        this.killFeed.addElimination(killerName, killerColor, victimName, victimColor)
+      }
+    })
+
+    this.client.onRoundResults((results: RoundResults) => {
+      this.roundResults = results
+
+      // Get current players from registry
+      const players = this.registry.get('players') as { id: string; name: string; color: string; isReady: boolean }[]
+
+      // Transition to results scene
+      this.client.disconnect()
+      this.scene.start('ResultsScene', {
+        results,
+        playerId: this.playerId,
+        players,
+      })
+    })
+
     this.client.onGameOver((winnerId: string, winnerName: string) => {
-      this.scene.start('GameOverScene', { winnerId, winnerName, isWinner: winnerId === this.playerId })
+      // This is handled by onRoundResults now, but keep as fallback
+      if (!this.roundResults) {
+        this.scene.start('GameOverScene', { winnerId, winnerName, isWinner: winnerId === this.playerId })
+      }
     })
   }
 
-  updateFromServer(state: GameState) {
-    // Update tank positions from server state (keyed by name for stable lookup)
+  updateFromServer(state: GameState, ackSeq?: number) {
+    // Update tank positions from server state
     state.players.forEach((playerState) => {
       const playerNameKey = playerState.name.toUpperCase()
       const tank = this.tanks.get(playerNameKey)
       if (tank) {
         if (playerNameKey === this.playerName) {
-          // Sync local player position directly from server (authoritative)
-          tank.sprite.setPosition(playerState.x, playerState.y)
-          tank.sprite.setRotation(playerState.rotation)
+          // Client-side prediction reconciliation
+          if (ackSeq !== undefined) {
+            const serverPosition: Position = {
+              x: playerState.x,
+              y: playerState.y,
+              rotation: playerState.rotation,
+            }
+
+            // Reconcile with server position
+            const reconciledPosition = this.predictionSystem.reconcile(serverPosition, ackSeq)
+
+            // Check if we need to correct
+            const currentPosition: Position = {
+              x: tank.sprite.x,
+              y: tank.sprite.y,
+              rotation: tank.sprite.rotation,
+            }
+
+            if (this.predictionSystem.shouldCorrect(currentPosition, reconciledPosition, 3)) {
+              // Smooth correction
+              const corrected = this.predictionSystem.smoothCorrection(currentPosition, reconciledPosition, 0.3)
+              tank.sprite.setPosition(corrected.x, corrected.y)
+              tank.sprite.setRotation(corrected.rotation)
+            }
+          } else {
+            // No prediction, use server position directly
+            tank.sprite.setPosition(playerState.x, playerState.y)
+            tank.sprite.setRotation(playerState.rotation)
+          }
         } else {
           // Interpolate other players' positions
           tank.setTargetPosition(playerState.x, playerState.y, playerState.rotation)
         }
         tank.setLives(playerState.lives)
         tank.setInvulnerable(playerState.isInvulnerable)
+
+        // Store updated player info
+        this.playerColors.set(playerState.id, playerState.color)
+        this.playerNames.set(playerState.id, playerState.name)
       }
     })
 
@@ -226,12 +340,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateBullets(serverBullets: BulletState[]) {
-    // Create set of current bullet IDs
     const currentIds = new Set(serverBullets.map((b) => b.id))
 
-    // Remove bullets that no longer exist
+    // Remove bullets that no longer exist (with hit effect)
     this.bullets.forEach((bullet, id) => {
       if (!currentIds.has(id)) {
+        // Create hit effect at bullet position
+        this.effects.createHitSparks(bullet.sprite.x, bullet.sprite.y)
         bullet.destroy()
         this.bullets.delete(id)
       }
@@ -246,7 +361,7 @@ export class GameScene extends Phaser.Scene {
 
         // Add collision with walls
         this.physics.add.collider(bullet.sprite, this.walls, () => {
-          // Bullet destroyed on wall hit - server will handle removal
+          this.effects.createWallHitEffect(bullet!.sprite.x, bullet!.sprite.y)
         })
       } else {
         bullet.setPosition(bulletState.x, bulletState.y)
@@ -256,16 +371,22 @@ export class GameScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     // Handle local player input
-    this.handleInput(time)
+    this.handleInput(time, delta)
 
     // Update all tanks
     this.tanks.forEach((tank) => tank.update(delta))
 
     // Update all bullets
     this.bullets.forEach((bullet) => bullet.update(delta))
+
+    // Update effects
+    this.effects.update(delta)
+
+    // Update kill feed
+    this.killFeed.update()
   }
 
-  handleInput(time: number) {
+  handleInput(time: number, delta: number) {
     const myTank = this.tanks.get(this.playerName)
     if (!myTank || !myTank.isAlive) return
 
@@ -282,7 +403,7 @@ export class GameScene extends Phaser.Scene {
     // Calculate rotation based on movement
     let rotation = myTank.sprite.rotation
     if (dx !== 0 || dy !== 0) {
-      rotation = Math.atan2(dy, dx) + Math.PI / 2 // Offset because tank sprite points up
+      rotation = Math.atan2(dy, dx) + Math.PI / 2
     }
 
     // Check for fire input
@@ -290,26 +411,76 @@ export class GameScene extends Phaser.Scene {
 
     if (fire) {
       this.lastFireTime = time
+
+      // Create muzzle flash effect
+      this.effects.createMuzzleFlash(myTank.sprite.x, myTank.sprite.y, rotation)
     }
+
+    const isMoving = dx !== 0 || dy !== 0
 
     // Apply local movement prediction
-    if (dx !== 0 || dy !== 0) {
-      myTank.move(dx, dy, rotation)
-    } else {
-      myTank.stop()
-    }
+    if (isMoving) {
+      // Predict position locally
+      const currentPosition: Position = {
+        x: myTank.sprite.x,
+        y: myTank.sprite.y,
+        rotation: myTank.sprite.rotation,
+      }
 
-    // Send input to server
-    if (dx !== 0 || dy !== 0 || fire) {
+      const deltaTime = delta / 1000
+      const predictedPosition = this.predictionSystem.predictPosition(
+        currentPosition,
+        { dx, dy, rotation },
+        deltaTime
+      )
+
+      // Apply predicted position
+      myTank.sprite.setPosition(predictedPosition.x, predictedPosition.y)
+      myTank.sprite.setRotation(predictedPosition.rotation)
+
+      // Store input in buffer
       this.inputSeq++
-      this.client.sendInput({
-        type: 'input',
+      const input = {
+        type: 'input' as const,
         seq: this.inputSeq,
         dx,
         dy,
         fire,
         rotation,
+      }
+
+      this.inputBuffer.addInput(input, predictedPosition)
+
+      // Send input to server
+      this.client.sendInput(input)
+
+      this.wasMoving = true
+    } else if (this.wasMoving || fire) {
+      // Send stop input when player was moving but now stopped
+      // OR when firing without movement
+      this.inputSeq++
+      this.client.sendInput({
+        type: 'input',
+        seq: this.inputSeq,
+        dx: 0,
+        dy: 0,
+        fire,
+        rotation,
       })
+
+      this.wasMoving = false
+    }
+  }
+
+  shutdown() {
+    if (this.client) {
+      this.client.disconnect()
+    }
+    if (this.hud) {
+      this.hud.destroy()
+    }
+    if (this.killFeed) {
+      this.killFeed.destroy()
     }
   }
 }

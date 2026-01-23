@@ -28,7 +28,8 @@
       "Bash(export PATH=\"/home/nicholasliu/.nvm/versions/node/v24.13.0/bin:$PATH\")",
       "Bash(timeout 5 /home/nicholasliu/.nvm/versions/node/v24.13.0/bin/npx:*)",
       "Bash(git -c credential.helper='!gh auth git-credential' push origin main)",
-      "Bash(GIT_TERMINAL_PROMPT=0 git -c \"credential.helper=!gh auth git-credential\" push origin main)"
+      "Bash(GIT_TERMINAL_PROMPT=0 git -c \"credential.helper=!gh auth git-credential\" push origin main)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
